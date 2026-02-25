@@ -1,43 +1,70 @@
-PromptLoop
-PromptLoop is a high-performance, safety-first wrapper for MLX-LM designed specifically for Apple Silicon (M1/M2/M3/M4).
+# PromptLoop
 
-It abstracts away the complex logic of running local LLMs—memory management, token streaming, history trimming, and system safety—allowing you to build powerful, stable AI tools with just a few lines of code.
+A high-performance, safety-first wrapper for **MLX-LM** designed for Apple Silicon (M1/M2/M3/M4).
 
-⚡️ Key Features
-🛡️ Safety & Stability
+PromptLoop abstracts away the complex logic of running local LLMs — memory management, token streaming, LoRA adapters, MCP tool calling, history trimming, and system safety — allowing you to build powerful, stable AI tools with just a few lines of code.
 
-Memory Guardian: Active "Zero-Tolerance" monitoring. If RAM hits 95% or Swap > 0GB, the engine stops immediately to prevent system freeze.
+---
 
-Input Flood Protection: Automatically rejects massive text pastes (e.g., accidental PDFs) that would crash the tokenizer.
+## ⚡️ Features
 
-🧠 Smart Control
+### 🛡️ Safety & Stability
+- **Memory Guardian** — Active monitoring with configurable RAM/Swap thresholds. If RAM hits 95% or Swap exceeds the limit, the engine stops immediately to prevent system freeze.
+- **Input Flood Protection** — Automatically rejects massive text pastes (e.g., accidental PDFs) that would crash the tokenizer.
+- **Clean Exit Handling** — Built-in signal handlers prevent zombie processes on `Ctrl+C`.
 
-Sampling Profiles: One-click presets (creative, precise, strict) to instantly change the AI's "brain chemistry."
+### 🧠 Smart Control
+- **Sampling Profiles** — One-click presets (`creative`, `precise`, `strict`, `balanced`) to instantly change the model's behavior.
+- **Custom Exit Triggers** — Define your own stop words (e.g., `["bye", "quit", "save"]`).
+- **Headless Bridge** — Built-in `output_callback` hook to pipe output to GUIs (Tkinter, PyQt, Web) without parsing terminal text.
 
-Headless Bridge: Built-in hooks to pipe output to GUIs (Tkinter, PyQt, Web) without parsing terminal text.
+### 🔌 LoRA Adapter Support
+- Load any LoRA fine-tuned adapter alongside a base model with a single `adapter_path` argument.
+- Works in both `run_chat()` (interactive) and `run_one_shot()` (single-turn) modes.
 
-Custom Exit Triggers: Define your own stop words (e.g., ["bye", "quit", "stop"]).
+### 🛠️ MCP Tool Calling (Model Context Protocol)
+- Give your local LLM access to external tools using the **FastMCP** standard.
+- The engine automatically detects tool calls in the model's output, executes them, and feeds results back into the conversation.
+- Bridge any FastMCP server with one function: `mcp_to_promptloop()`.
 
-💾 Storage
+### 💾 Storage
+- **Chat Export** — Built-in utility to save conversation history to clean, readable text files.
 
-Chat Export: Built-in utility to save conversation history to clean, readable text files.
+### 🔢 Performance Tracking
+- **Token Timer** — Real-time tokens-per-second (TPS) reporting after each generation.
 
-📦 Installation
-Since this library is designed for local development, install it in Editable Mode. This allows you to tweak the library and see changes instantly.
+---
 
-Bash
+## 📦 Installation
+
+This library is designed for local development on Apple Silicon. Install with `uv`:
+
+```bash
 git clone https://github.com/yourusername/promptloop.git
 cd promptloop
-pip install -e .
-🛠️ The Master Template
-This script demonstrates every capability of the library: profiles, safety, file saving, and custom inputs.
+uv sync
+```
 
-Python
+Or install in editable mode with pip:
+
+```bash
+pip install -e .
+```
+
+**Requirements:** Python ≥ 3.10, macOS with Apple Silicon.
+
+---
+
+## 🛠️ The Master Template
+
+This script demonstrates every core capability of the library: profiles, safety, file saving, custom inputs, and LoRA adapters.
+
+```python
 import os
 from promptloop import (
-    run_chat, 
-    get_multiline_input, 
-    configure_input, 
+    run_chat,
+    get_multiline_input,
+    configure_input,
     register_signal_handlers
 )
 from promptloop.storage import save_chat_history
@@ -48,13 +75,13 @@ def main():
 
     # 2. Setup & Configuration
     model_path = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
-    
+
     # 3. Custom Input Tool
     # Allows pasting multi-line text. Sends when user types '!!!' on a new line.
     user_tool = configure_input(
-        get_multiline_input, 
+        get_multiline_input,
         "\n📝 Paste text (Type '!!!' to send): ",
-        sentinel="!!!" 
+        sentinel="!!!"
     )
 
     print(f"🔄 Initializing {model_path}...")
@@ -66,21 +93,24 @@ def main():
             system_prompt="You are a helpful assistant.",
             model_path=model_path,
             input_fn=user_tool,
-            
+
             # --- Personality ---
-            profile="creative",    # Options: balanced, creative, precise, strict
-            
+            profile="creative",       # Options: balanced, creative, precise, strict
+
+            # --- LoRA (Optional) ---
+            adapter_path=None,         # Path to a LoRA adapter directory
+
             # --- Safety ---
-            use_guardian=True,     # Kill if RAM > 95%
-            max_input_tokens=4000, # Reject massive inputs
-            
+            use_guardian=True,         # Kill if RAM > 95%
+            max_input_tokens=4000,     # Reject massive inputs
+
             # --- Control ---
             exit_keywords=["bye", "save", "quit"],
             stream=True,
-            
+
             # --- UI Polish ---
-            wait_message="\n(🧠 Thinking...)",  
-            response_prefix="\n🤖 Llama: "      
+            wait_message="\n(🧠 Thinking...)",
+            response_prefix="\n🤖 Llama: "
         )
 
         # 5. Save Workflow
@@ -95,94 +125,218 @@ def main():
 
 if __name__ == "__main__":
     main()
-🎭 Sampling Profiles Index
-You can change the AI's "personality" by passing the profile argument to run_chat.
+```
 
-Profile	Temp	Top-P	Best For...
-balanced	0.6	1.0	Default. Good mix of coherence and variety.
-creative	0.8	0.9	Storytelling. Writes more human-like, varied prose.
-precise	0.2	0.95	Editing. Stick to the facts/instructions. Less hallucination.
-strict	0.0	1.0	Coding/Math. Deterministic. Always gives the same answer.
-🎛️ Understanding Sampling Parameters
-If you want to manually tune the AI beyond the profiles, here is what the numbers actually do.
+---
 
-🔥 Temperature (Chaos Level)
+## 🔌 MCP Tool Calling Example
 
-Controls the randomness of the next token.
+Give your local model access to external tools using the Model Context Protocol:
 
-0.0 (Cold): The model always picks the most likely word. Robotic, repetitive, safe.
+```python
+from mcp import FastMCP
+from promptloop import run_chat, register_signal_handlers
+from promptloop.mcp_tools import mcp_to_promptloop
 
-1.0 (Hot): The model picks from a wider range of words. Creative, unpredictable, human.
+# 1. Define your tools
+mcp = FastMCP("MyTools")
 
-Recommended Range: 0.6 - 0.8
+@mcp.tool()
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"The weather in {city} is 22°C and sunny."
 
-🎯 Top-P (Nucleus Sampling)
+@mcp.tool()
+def search_docs(query: str) -> str:
+    """Search internal documentation."""
+    return f"Found 3 results for '{query}'."
 
-A "smart filter" that cuts off the least likely words.
+# 2. Bridge to PromptLoop
+tools, handler = mcp_to_promptloop(mcp)
 
-1.0 (Off): Considers every possible word in the dictionary.
+# 3. Run with tools
+register_signal_handlers()
+run_chat(
+    system_prompt="You are an assistant with access to tools. Use them when needed.",
+    model_path="mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+    input_fn=input,
+    tools=tools,
+    tool_handler=handler,
+    stream=True,
+)
+```
 
-0.9 (On): Only considers the top 90% most likely words. This removes "gibberish" while keeping creativity high.
+When the model decides to call a tool, the engine will:
+1. Parse the tool call JSON from the model's output.
+2. Execute the matching tool function.
+3. Inject the result back into the conversation.
+4. Re-prompt the model for a final answer.
 
-Why use it? It prevents the AI from going completely off the rails when using high temperature.
+---
 
-🔢 Top-K (Hard Filter)
+## 🔥 One-Shot Mode
 
-Restricts the AI to the top K words.
+For single-turn inference (no chat loop), use `run_one_shot()`:
 
--1 (Off): Our default. Modern models generally perform better with Top-P than Top-K.
+```python
+from promptloop import run_one_shot
 
-🖥️ Building a GUI (The Bridge Pattern)
-PromptLoop is "Headless," meaning it can power a Chatbot GUI without blocking the interface.
+response = run_one_shot(
+    model_path="mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+    system_prompt="You are a code reviewer.",
+    user_prompt="Review this function: def add(a, b): return a + b",
+    adapter_path=None,  # Optional LoRA adapter
+)
+print(response)
+```
 
-The Logic:
+---
 
-Input: Use a Python Queue to pass text from the GUI to the Engine.
+## 🎭 Sampling Profiles
 
-Output: Use the output_callback argument to pipe text from the Engine to your window.
+Change the model's behavior with a single string:
 
-Threading: Run run_chat in a separate thread.
+| Profile      | Temp  | Top-P | Best For                                              |
+|:-------------|:-----:|:-----:|:------------------------------------------------------|
+| `balanced`   | 0.6   | 1.0   | Default. Good mix of coherence and variety.            |
+| `creative`   | 0.8   | 0.9   | Storytelling. More human-like, varied prose.           |
+| `precise`    | 0.2   | 0.95  | Editing. Stick to facts/instructions. Less hallucination. |
+| `strict`     | 0.0   | 1.0   | Coding/Math. Deterministic. Always the same answer.    |
 
-Python
-# Minimal GUI Example
-def start_engine():
-    run_chat(
-        ...,
-        input_fn=my_queue.get,           # Wait for GUI input
-        output_callback=my_text_widget.insert # Send text to GUI
-    )
+### Manual Override
 
-⚙️ Manual Parameter Tuning (Power User Mode)
+Override any individual setting while keeping the rest of a profile:
 
-While PromptLoop includes presets, you can override any individual setting by passing it directly to run_chat. When a manual value is provided, it overrides the profile setting for that specific parameter.
-
-Option 1: Overriding a Profile
-
-If you like the creative profile but want it to be even more "chaotic," you can keep the profile's top_p settings but manually boost the temp.
-
-Python
+```python
 run_chat(
     ...,
     profile="creative",  # Standard Top-P: 0.9
-    temp=1.2             # Overrides creative's 0.8 to a much hotter 1.2
+    temp=1.2             # Override to a much hotter 1.2
 )
-Option 2: Complete Manual Control
+```
 
-If you want to ignore the presets entirely, simply pass your own values for all three parameters. This effectively bypasses the profile dictionary.
+Or bypass profiles entirely with full manual control:
 
-Python
+```python
 run_chat(
     ...,
     temp=0.75,
     top_p=0.92,
-    top_k=50    # Restricts the model to the top 50 most likely words
+    top_k=50
 )
-How the Logic Priority Works:
+```
 
-The engine follows a strict hierarchy when determining which value to use:
+**Priority:** Manual arguments → Profile values → `balanced` defaults.
 
-Manual Input: If temp, top_p, or top_k are provided as arguments, those values are used first.
+---
 
-Profile Selection: If a parameter is not manually provided, the engine looks at the chosen profile.
+## 🖥️ Building a GUI (The Bridge Pattern)
 
-Default Fallback: If no profile is chosen, the engine defaults to the balanced profile values.
+PromptLoop is headless — it can power a GUI without blocking the interface:
+
+```python
+import threading
+from queue import Queue
+
+gui_queue = Queue()
+
+def start_engine():
+    run_chat(
+        ...,
+        input_fn=gui_queue.get,              # Wait for GUI input
+        output_callback=my_text_widget.insert # Send text to GUI
+    )
+
+threading.Thread(target=start_engine, daemon=True).start()
+```
+
+- **Input:** Use a `Queue` to pass text from the GUI to the engine.
+- **Output:** Use `output_callback` to pipe text from the engine to your window.
+- **Threading:** Run `run_chat` in a separate thread.
+
+---
+
+## 📖 API Reference
+
+### `run_chat()`
+
+The main interactive chat engine.
+
+| Parameter          | Type                      | Default         | Description                                     |
+|:-------------------|:--------------------------|:----------------|:------------------------------------------------|
+| `system_prompt`    | `str` or `dict`           | —               | System prompt (auto-wrapped if string).          |
+| `model_path`       | `str`                     | —               | HuggingFace repo or local model path.            |
+| `input_fn`         | `Callable`                | —               | Function that returns user input.                |
+| `max_tokens`       | `int`                     | `2048`          | Max tokens per response.                         |
+| `history_limit`    | `int`                     | `10`            | Max conversation turns to keep.                  |
+| `stream`           | `bool`                    | `True`          | Stream tokens in real-time.                      |
+| `profile`          | `str`                     | `"balanced"`    | Sampling preset.                                 |
+| `temp`             | `float` or `None`         | `None`          | Manual temperature override.                     |
+| `top_p`            | `float` or `None`         | `None`          | Manual top-p override.                           |
+| `top_k`            | `int` or `None`           | `None`          | Manual top-k override.                           |
+| `adapter_path`     | `str` or `None`           | `None`          | Path to LoRA adapter directory.                  |
+| `tools`            | `list` or `None`          | `None`          | MCP tool schemas for the model.                  |
+| `tool_handler`     | `Callable` or `None`      | `None`          | Function to dispatch tool calls.                 |
+| `use_guardian`      | `bool`                   | `False`         | Enable Memory Guardian.                          |
+| `max_input_tokens` | `int`                     | `4000`          | Max input length before rejection.               |
+| `exit_keywords`    | `list[str]`               | `["exit","quit"]` | Words that end the session.                    |
+| `wait_message`     | `str`                     | `""`            | Message shown while model generates.             |
+| `response_prefix`  | `str`                     | `""`            | Prefix before each response.                     |
+| `output_callback`  | `Callable` or `None`      | `None`          | Redirect output to a function (GUI hook).        |
+| `verbose`          | `bool`                    | `True`          | Print status messages.                           |
+
+**Returns:** `List[Dict[str, str]]` — The full message history.
+
+### `run_one_shot()`
+
+Single-turn inference. No chat loop.
+
+| Parameter       | Type             | Default  | Description                          |
+|:----------------|:-----------------|:---------|:-------------------------------------|
+| `model_path`    | `str`            | —        | HuggingFace repo or local path.      |
+| `system_prompt` | `str` or `dict`  | —        | System prompt.                       |
+| `user_prompt`   | `str`            | —        | The user's input.                    |
+| `max_tokens`    | `int`            | `2048`   | Max tokens.                          |
+| `adapter_path`  | `str` or `None`  | `None`   | Path to LoRA adapter.                |
+| `model`         | `Any` or `None`  | `None`   | Pre-loaded model (avoids reload).    |
+| `tokenizer`     | `Any` or `None`  | `None`   | Pre-loaded tokenizer.                |
+
+**Returns:** `str` — The model's response.
+
+### `mcp_to_promptloop(mcp_server)`
+
+Bridges a FastMCP server into PromptLoop.
+
+**Returns:** `(tools, tool_handler)` — A tuple ready to pass into `run_chat()`.
+
+### `save_chat_history(messages, filename)`
+
+Exports a message history list to a formatted text file.
+
+### `configure_input(func, prompt_text, sentinel)`
+
+Pre-configures an input function with baked-in arguments. Attaches the sentinel as a hidden tag for the engine to auto-discover.
+
+### `get_multiline_input(prompt_text, sentinel)`
+
+Collects multi-line input until the sentinel string is entered on a new line.
+
+### `register_signal_handlers()`
+
+Registers `SIGINT` handlers for clean `Ctrl+C` exit behavior.
+
+---
+
+## 🔐 Security
+
+This project follows the **Ironclad Security Protocol**:
+
+- All dependencies are version-pinned in `pyproject.toml` and locked in `uv.lock`.
+- No `eval()`, `exec()`, or `shell=True` anywhere in the codebase.
+- Pre-commit hooks enforce **Ruff**, **Gitleaks**, **Trivy**, and **Semgrep** on every commit.
+
+---
+
+## 📄 License
+
+MIT
