@@ -8,6 +8,7 @@ def run_one_shot(
     system_prompt: Union[dict, str],  # Now accepts dict OR str
     user_prompt: str,
     max_tokens: int = 2048,
+    adapter_path: Optional[str] = None,
     model: Optional[Any] = None,
     tokenizer: Optional[Any] = None,
 ) -> str:
@@ -20,7 +21,7 @@ def run_one_shot(
 
     # Only load if not provided
     if model is None or tokenizer is None:
-        model, tokenizer, *_ = load(model_path)
+        model, tokenizer, *_ = load(model_path, adapter_path=adapter_path)
 
     messages = [
         system_prompt,

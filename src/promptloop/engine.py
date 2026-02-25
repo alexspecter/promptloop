@@ -1,4 +1,5 @@
-from typing import Callable, Union, Optional, List, Dict
+from typing import Callable, Union, Optional, List, Dict, Any
+import json
 import mlx.core as mx
 from mlx_lm import load, generate, stream_generate
 from mlx_lm.sample_utils import make_sampler
@@ -14,6 +15,37 @@ SAMPLING_PROFILES = {
     "precise": {"temp": 0.2, "top_p": 0.95, "top_k": -1},
     "strict": {"temp": 0.0, "top_p": 1.0, "top_k": -1},
 }
+
+
+def _extract_tool_call(text: str) -> Optional[tuple]:
+    """
+    Attempts to extract a tool call from the model's response text.
+
+    Looks for JSON blocks containing {"name": "...", "arguments": {...}}
+    which is the standard tool-calling format for chat models.
+
+    Returns:
+        A tuple of (tool_name, tool_args) if found, else None.
+    """
+    import re
+
+    # Try to find a JSON block (possibly inside markdown fences)
+    patterns = [
+        r"```(?:json)?\s*(\{.*?\})\s*```",  # Fenced code block
+        r"(\{[^{}]*\"name\"[^{}]*\"arguments\"[^{}]*\{.*?\}[^{}]*\})",  # Inline JSON
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                if "name" in data and "arguments" in data:
+                    return data["name"], data["arguments"]
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    return None
 
 
 def run_chat(
@@ -36,6 +68,11 @@ def run_chat(
     # Safety Settings
     use_guardian: bool = False,
     max_input_tokens: int = 4000,
+    # LoRA Adapter
+    adapter_path: Optional[str] = None,
+    # MCP Tools
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_handler: Optional[Callable[[str, dict], str]] = None,
     # Sampling
     profile: str = "balanced",
     temp: Optional[float] = None,
@@ -55,9 +92,11 @@ def run_chat(
 
     if verbose:
         emit(f"Loading model: {model_path}...\n")
+        if adapter_path:
+            emit(f"Loading LoRA adapter: {adapter_path}...\n")
 
     # Use the 'trash bag' syntax to safely handle variable returns from MLX
-    model, tokenizer, *_ = load(model_path)
+    model, tokenizer, *_ = load(model_path, adapter_path=adapter_path)
 
     guardian = MemoryGuardian() if use_guardian else None
     messages: MessageHistory = [system_prompt]
@@ -171,6 +210,75 @@ def run_chat(
                 break
 
             messages.append({"role": "assistant", "content": response_text})
+
+            # --- MCP TOOL CALLING LOOP ---
+            if tools and tool_handler:
+                tool_call = _extract_tool_call(response_text)
+                while tool_call:
+                    tool_name, tool_args = tool_call
+                    if verbose:
+                        emit(f"\n🔧 Calling tool: {tool_name}...\n")
+
+                    try:
+                        tool_result = tool_handler(tool_name, tool_args)
+                    except Exception as e:
+                        tool_result = f"Error executing tool '{tool_name}': {e}"
+
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": str(tool_result),
+                        }
+                    )
+                    messages = trim_messages(messages, history_limit)
+
+                    # Re-prompt the model with the tool result
+                    try:
+                        prompt = tokenizer.apply_chat_template(
+                            messages,
+                            tokenize=False,
+                            add_generation_prompt=True,
+                        )
+                    except Exception as e:
+                        emit(f"Error applying chat template: {e}\n")
+                        break
+
+                    response_text = ""
+                    try:
+                        if stream:
+                            timer.start()
+                            for response in stream_generate(
+                                model,
+                                tokenizer,
+                                prompt=prompt,
+                                max_tokens=max_tokens,
+                                sampler=sampler,
+                            ):
+                                if guardian:
+                                    guardian.check()
+                                chunk = response.text
+                                emit(chunk)
+                                response_text += chunk
+                                timer.tick()
+                            emit(f"\n{'-' * 40}\n")
+                        else:
+                            response_text = generate(
+                                model,
+                                tokenizer,
+                                prompt=prompt,
+                                max_tokens=max_tokens,
+                                sampler=sampler,
+                                verbose=False,
+                            )
+                            emit(f"{response_text}\n{'-' * 40}\n")
+                    except MemoryError as e:
+                        emit(f"\n\n🛑 {e}\nStopping generation.\n")
+                        break
+
+                    messages.append({"role": "assistant", "content": response_text})
+                    tool_call = _extract_tool_call(response_text)
+            # --- END MCP TOOL CALLING LOOP ---
 
     finally:
         mx.clear_cache()

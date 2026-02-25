@@ -3,6 +3,7 @@ from .output import parse_json_response
 from .one_shot import run_one_shot
 from .multi_input import get_multiline_input
 from .signals import register_signal_handlers
+from .mcp_tools import mcp_to_promptloop
 
 # Add the new utility here
 from .utils import configure_input, create_system_prompt
@@ -15,4 +16,5 @@ __all__ = [
     "register_signal_handlers",
     "create_system_prompt",
     "configure_input",
+    "mcp_to_promptloop",
 ]
