@@ -13,4 +13,5 @@ dist/
 .DS_Store
 .vscode 
 .ruff_cache
-
+SECURITY_PROTOCOL.md
+Promptloop TEMPLATE.txt
