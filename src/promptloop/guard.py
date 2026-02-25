@@ -1,16 +1,17 @@
 import psutil
 
+
 class MemoryGuardian:
     def __init__(self, max_ram_percent: float = 95.0, max_swap_gb: float = 0.5):
         """
         A strict watchdog for system memory.
-        
+
         Args:
             max_ram_percent (float): Stop if RAM usage exceeds this % (Default: 95.0)
             max_swap_gb (float): Stop if Swap usage exceeds this GB (Default: 0.0 for zero-tolerance)
         """
         self.max_ram_percent = max_ram_percent
-        self.max_swap_bytes = max_swap_gb * (1024 ** 3) # Convert GB to Bytes
+        self.max_swap_bytes = max_swap_gb * (1024**3)  # Convert GB to Bytes
         self.triggered = False
 
     def check(self):
@@ -31,12 +32,12 @@ class MemoryGuardian:
         swap = psutil.swap_memory()
         if swap.used > self.max_swap_bytes:
             self.triggered = True
-            used_gb = swap.used / (1024 ** 3)
-            limit_gb = self.max_swap_bytes / (1024 ** 3)
+            used_gb = swap.used / (1024**3)
             raise MemoryError(
                 f"⚠️ CRITICAL: System started swapping! ({used_gb:.2f}GB used). "
                 "Immediate shutdown initiated to save system stability."
             )
+
 
 def get_memory_stats() -> str:
     """Returns a formatted string of current memory stats for UI display."""

@@ -1,11 +1,12 @@
 import json
 import re
 
+
 def parse_json_response(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        match = re.search(r'(\{.*\})', text, re.DOTALL)
+        match = re.search(r"(\{.*\})", text, re.DOTALL)
         if match:
             try:
                 return json.loads(match.group(1))

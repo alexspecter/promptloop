@@ -1,0 +1,34 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff Linter
+        entry: ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: ruff-format
+        name: Ruff Formatter
+        entry: ruff format
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: gitleaks
+        name: Gitleaks
+        entry: gitleaks protect --verbose --staged
+        language: system
+        pass_filenames: false
+
+      - id: trivy-fs
+        name: Trivy Filesystem Scan
+        entry: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 .
+        language: system
+        pass_filenames: false
+
+      - id: semgrep
+        name: Semgrep Pro Engine
+        entry: semgrep scan --config auto --error
+        language: system
+        pass_filenames: false
