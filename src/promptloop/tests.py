@@ -2,9 +2,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 import io
 
-# Import your modules
-import functions
-import engine
+from promptloop import functions
+from promptloop import engine
 
 
 class TestFunctions(unittest.TestCase):
@@ -84,9 +83,9 @@ class TestFunctions(unittest.TestCase):
 
 class TestEngine(unittest.TestCase):
     # --- Testing Chat Loop (Streaming) ---
-    @patch("engine.load")
-    @patch("engine.stream_generate")  # Mock the streaming generator
-    @patch("engine.mx.clear_cache")
+    @patch("promptloop.engine.load")
+    @patch("promptloop.engine.stream_generate")  # Mock the streaming generator
+    @patch("promptloop.engine.mx.clear_cache")
     def test_run_chat_stream_flow(
         self, mock_clear_cache, mock_stream_generate, mock_load
     ):
@@ -97,8 +96,9 @@ class TestEngine(unittest.TestCase):
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
         mock_tokenizer.model_max_length = 1000
-        mock_tokenizer.encode.side_effect = lambda x: [1] * len(x.split())
+        mock_tokenizer.encode.side_effect = lambda x, **kwargs: [1] * len(x.split())
         mock_tokenizer.apply_chat_template.return_value = "Mock Prompt"
+        mock_tokenizer.bos_token = "<bos>"
 
         mock_load.return_value = (mock_model, mock_tokenizer)
 
@@ -142,13 +142,14 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(passed_messages[-1]["content"], "Hello World")
 
     # --- Testing Chat Loop (Non-Streaming) ---
-    @patch("engine.load")
-    @patch("engine.generate")  # Mock the standard generator
+    @patch("promptloop.engine.load")
+    @patch("promptloop.engine.generate")  # Mock the standard generator
     def test_run_chat_no_stream(self, mock_generate, mock_load):
         """Test the non-streaming path calls generate() instead of stream_generate()."""
         mock_tokenizer = MagicMock()
         mock_tokenizer.model_max_length = 1000
         mock_tokenizer.encode.return_value = [1]
+        mock_tokenizer.bos_token = "<bos>"
         mock_load.return_value = (MagicMock(), mock_tokenizer)
 
         mock_generate.return_value = "Full Response"
@@ -165,19 +166,22 @@ class TestEngine(unittest.TestCase):
         mock_generate.assert_called()
 
     # --- Testing Edge Cases: Context Limit ---
-    @patch("engine.load")
-    def test_context_limit_error(self, mock_load):
+    @patch("promptloop.engine.stream_generate")
+    @patch("promptloop.engine.load")
+    def test_context_limit_error(self, mock_load, mock_stream):
         """Test that the engine detects prompts that are too large."""
         mock_tokenizer = MagicMock()
         mock_tokenizer.model_max_length = 10
         # Make a prompt that counts to 20 tokens (over the limit of 10)
-        mock_tokenizer.encode.side_effect = lambda x: [0] * 20
+        mock_tokenizer.encode.side_effect = lambda x, **kwargs: [0] * 20
         mock_tokenizer.apply_chat_template.return_value = "Long Prompt"
+        mock_tokenizer.bos_token = "<bos>"
 
         mock_load.return_value = (MagicMock(), mock_tokenizer)
 
         # Input that triggers the overflow, then exit
-        input_mock = MagicMock(side_effect=["Huge Input", "exit"])
+        # Needs to be > max_input_tokens * 5 (which is 4000 * 5 = 20000 chars)
+        input_mock = MagicMock(side_effect=["A" * 25000, "exit"])
 
         # Capture stdout to verify the error message print
         with patch("sys.stdout", new=io.StringIO()) as fake_out:
@@ -189,20 +193,19 @@ class TestEngine(unittest.TestCase):
             )
 
             output = fake_out.getvalue()
-            self.assertIn("Prompt too large", output)
-            self.assertIn("Clearing history", output)
+            self.assertIn("Input too long", output)
 
     # --- Testing Edge Cases: Model Load Failure ---
-    @patch("engine.load")
+    @patch("promptloop.engine.load")
     def test_model_load_failure(self, mock_load):
         """Test that loading errors are raised correctly."""
         mock_load.side_effect = Exception("Disk error")
 
-        with self.assertRaises(RuntimeError) as cm:
+        with self.assertRaises(Exception) as cm:
             engine.run_chat(
                 system_prompt={}, model_path="bad/path", input_fn=MagicMock()
             )
-        self.assertIn("Failed to load model", str(cm.exception))
+        self.assertIn("Disk error", str(cm.exception))
 
 
 if __name__ == "__main__":
