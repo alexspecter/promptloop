@@ -4,6 +4,8 @@ A high-performance, safety-first wrapper for **MLX-LM** designed for Apple Silic
 
 PromptLoop abstracts away the complex logic of running local LLMs — memory management, token streaming, LoRA adapters, MCP tool calling, history trimming, and system safety — allowing you to build powerful, stable AI tools with just a few lines of code.
 
+[Video Demo](https://youtu.be/2c-TmHA9WTM)
+
 ---
 
 ## ⚡️ Features
