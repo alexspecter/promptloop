@@ -40,7 +40,7 @@ PromptLoop abstracts away the complex logic of running local LLMs — memory man
 This library is designed for local development on Apple Silicon. Install with `uv`:
 
 ```bash
-git clone https://github.com/yourusername/promptloop.git
+git clone https://github.com/alexspecter/promptloop.git
 cd promptloop
 uv sync
 ```
